@@ -63,7 +63,13 @@ class StatisticsService {
       return Promise.reject(totalValueLockedUSD);
     }
 
-    const chainlinkAggregatorEnsHash = ethers.utils.namehash(`${poolBackingTokenTicker.toLowerCase()}-usd.data.eth`);
+    let ticker = poolBackingTokenTicker;
+    // In case backing token is WETH, fetch price for ETH from chainlink since WETH is not supported on chainlink.
+    if (poolBackingTokenTicker === 'WETH') {
+      ticker = 'ETH';
+    }
+
+    const chainlinkAggregatorEnsHash = ethers.utils.namehash(`${ticker.toLowerCase()}-usd.data.eth`);
     try {
       if (overrides) {
         totalValueLockedUSD = await this.stats.totalValueLockedAtGivenRate(
@@ -141,7 +147,13 @@ class StatisticsService {
       return Promise.reject(0);
     }
 
-    const ensNameHash = ethers.utils.namehash(`${tokenTicker.toLowerCase()}-usd.data.eth`);
+    let ticker = tokenTicker;
+    // In case backing token is WETH, fetch price for ETH from chainlink since WETH is not supported on chainlink.
+    if (tokenTicker === 'WETH') {
+      ticker = 'ETH';
+    }
+
+    const ensNameHash = ethers.utils.namehash(`${ticker.toLowerCase()}-usd.data.eth`);
 
     let rate: BigNumber;
     let rateDenominator: BigNumber;

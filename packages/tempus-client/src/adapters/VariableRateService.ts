@@ -162,7 +162,10 @@ class VariableRateService {
     let { principals, yields } = await this.getPoolTokens(poolConfig.poolId, principalsAddress, yieldsAddress);
 
     // Calculate current principals to yields ratio
-    const currentPrincipalsToYieldsRatio = div18f(principals, yields);
+    let currentPrincipalsToYieldsRatio = BigNumber.from('0');
+    if (!principals.isZero() && !yields.isZero()) {
+      currentPrincipalsToYieldsRatio = div18f(principals, yields);
+    }
 
     // Total fees accumulated
     let totalFees = BigNumber.from('0');
