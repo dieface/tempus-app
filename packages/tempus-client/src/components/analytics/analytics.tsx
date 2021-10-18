@@ -1,6 +1,6 @@
 // UI Components
 import Chart from '../charts/chart/chart';
-import Transactions from '../grids/transactions/transactions';
+// import Transactions from '../grids/transactions/transactions';
 
 // Constants
 import { volume24hTooltipText } from '../../constants';
@@ -17,9 +17,10 @@ function Statistics(): JSX.Element {
       <div className="tf-volume-chart-container">
         <Chart kind="VOLUME" title="Volume 24H" tooltip={volume24hTooltipText} />
       </div>
+      {/* TODO - Fix transactions view and enable it again
       <div className="tf-transactions-grid-container">
         <Transactions />
-      </div>
+      </div>*/}
     </div>
   );
 }

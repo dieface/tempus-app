@@ -1,5 +1,6 @@
 import { BigNumber, ethers } from 'ethers';
-import { Block, JsonRpcProvider, JsonRpcSigner } from '@ethersproject/providers';
+import { JsonRpcProvider, JsonRpcSigner } from '@ethersproject/providers';
+import { BLOCK_DURATION_SECONDS, SECONDS_IN_A_DAY } from '../constants';
 import ChartDataPoint from '../interfaces/ChartDataPoint';
 import StatisticsService from '../services/StatisticsService';
 import TempusPoolService from '../services/TempusPoolService';
@@ -8,7 +9,7 @@ import VaultService, { SwapEvent } from '../services/VaultService';
 import { getEventBackingTokenValue, getEventPoolAddress } from '../services/EventUtils';
 import TempusAMMService from '../services/TempusAMMService';
 import { div18f, mul18f } from '../utils/wei-math';
-import { Ticker } from '../interfaces';
+import getConfig from '../utils/get-config';
 
 type VolumeChartDataAdapterParameters = {
   signerOrProvider: JsonRpcProvider | JsonRpcSigner;
@@ -19,17 +20,8 @@ type VolumeChartDataAdapterParameters = {
   tempusAMMService: TempusAMMService;
 };
 
-interface EventChartData {
-  value: BigNumber;
-  date: Date;
-}
-
 class VolumeChartDataAdapter {
-  private readonly NUMBER_OF_PAST_DAYS = 30;
-  private readonly MILLISECONDS_IN_A_DAY = 86400000;
-
-  private eventBlockData: Block[] = [];
-  private chartData: EventChartData[] = [];
+  private readonly NUMBER_OF_PAST_DAYS = 29;
 
   private tempusPoolService: TempusPoolService | null = null;
   private statisticsService: StatisticsService | null = null;
@@ -37,66 +29,102 @@ class VolumeChartDataAdapter {
   private vaultService: VaultService | null = null;
   private tempusAMMService: TempusAMMService | null = null;
 
+  private signerOrProvider: JsonRpcProvider | JsonRpcSigner | null = null;
+
   public init(params: VolumeChartDataAdapterParameters): void {
     this.tempusPoolService = params.tempusPoolService;
     this.statisticsService = params.statisticsService;
     this.tempusControllerService = params.tempusControllerService;
     this.vaultService = params.vaultService;
     this.tempusAMMService = params.tempusAMMService;
+
+    this.signerOrProvider = params.signerOrProvider;
   }
 
   public async generateChartData(): Promise<ChartDataPoint[]> {
-    const chartDataPoints: ChartDataPoint[] = [];
-
+    let blocksToQuery: ethers.providers.Block[];
     try {
-      await this.fetchData();
+      blocksToQuery = await this.fetchDataPointBlocks();
     } catch (error) {
-      console.error('Failed to fetch data for volume chart.', error);
+      console.error('VolumeChartDataAdapter - generateChartData() - Failed to fetch data point blocks!', error);
       return Promise.reject(error);
     }
 
-    // Generate chart data for last NUMBER_OF_PAST_DAYS
-    const currentTime = Date.now();
-    for (let i = this.NUMBER_OF_PAST_DAYS; i > 0; i--) {
-      const startDate = new Date(currentTime - this.MILLISECONDS_IN_A_DAY * i);
-      const endDate = new Date(currentTime - this.MILLISECONDS_IN_A_DAY * (i - 1));
+    const chartDataSegmentsFetchPromises = [];
+    for (let i = 0; i < blocksToQuery.length - 1; i++) {
+      const currentBlock = blocksToQuery[i];
+      const nextBlock = blocksToQuery[i + 1];
 
-      chartDataPoints.push(this.getChartDataPoint(startDate, endDate, chartDataPoints[chartDataPoints.length - 1]));
+      chartDataSegmentsFetchPromises.push(this.getTempusVolume(currentBlock, nextBlock));
     }
+    const chartDataSegments = await Promise.all(chartDataSegmentsFetchPromises);
 
-    return chartDataPoints;
-  }
+    return chartDataSegments.map((chartDataSegment, index) => {
+      const previousChartDataSegment = chartDataSegments[index - 1];
 
-  private getChartDataPoint(dateFrom: Date, dateTo: Date, previous: ChartDataPoint): ChartDataPoint {
-    let value = BigNumber.from('0');
-    this.chartData.forEach(data => {
-      if (data.date > dateFrom && data.date < dateTo) {
-        value = value.add(data.value);
+      let valueIncrease = BigNumber.from('0');
+      if (previousChartDataSegment && previousChartDataSegment.volume && !previousChartDataSegment.volume.isZero()) {
+        const valueDiff = chartDataSegment.volume.sub(previousChartDataSegment.volume);
+        const valueRatio = div18f(valueDiff, previousChartDataSegment.volume);
+
+        valueIncrease = mul18f(valueRatio, ethers.utils.parseEther('100'));
       }
+
+      return {
+        value: Number(ethers.utils.formatEther(chartDataSegment.volume)),
+        date: new Date(chartDataSegment.timeEnd * 1000),
+        valueIncrease: ethers.utils.formatEther(valueIncrease),
+      };
     });
-
-    let valueIncrease = BigNumber.from('0');
-    if (previous && previous.value && !ethers.utils.parseEther(previous.value.toString()).isZero()) {
-      const valueDiff = value.sub(ethers.utils.parseEther(previous.value.toString()));
-      const valueRatio = div18f(valueDiff, ethers.utils.parseEther(previous.value.toString()));
-
-      valueIncrease = mul18f(valueRatio, ethers.utils.parseEther('100'));
-    }
-
-    return {
-      value: Number(ethers.utils.formatEther(value)),
-      date: dateTo,
-      valueIncrease: ethers.utils.formatEther(valueIncrease),
-    };
   }
 
-  /**
-   * Fetches all required data from contracts in order to build data structure for Volume chart
-   */
-  private async fetchData(): Promise<void> {
+  private async fetchDataPointBlocks(): Promise<ethers.providers.Block[]> {
+    if (!this.signerOrProvider) {
+      return Promise.reject();
+    }
+
+    const blockInterval = Math.floor(SECONDS_IN_A_DAY / BLOCK_DURATION_SECONDS);
+
+    let currentBlock: ethers.providers.Block;
+    try {
+      if (this.signerOrProvider instanceof JsonRpcProvider) {
+        currentBlock = await this.signerOrProvider.getBlock('latest');
+      } else {
+        currentBlock = await this.signerOrProvider.provider.getBlock('latest');
+      }
+    } catch (error) {
+      console.error('VolumeChartDataAdapter - fetchDataPointBlocks() - Failed to fetch latest block data!', error);
+      return Promise.reject(error);
+    }
+
+    let pastBlocks: ethers.providers.Block[];
+    try {
+      const blockFetchPromises = [];
+      // Fetch Blocks for previous NUMBER_OF_PAST_DAYS days (1 block per day)
+      for (let i = this.NUMBER_OF_PAST_DAYS; i >= 0; i--) {
+        const blockToQuery = currentBlock.number - (currentBlock.number % blockInterval) - i * blockInterval;
+        if (this.signerOrProvider instanceof JsonRpcProvider) {
+          blockFetchPromises.push(this.signerOrProvider.getBlock(blockToQuery));
+        } else {
+          blockFetchPromises.push(this.signerOrProvider.provider.getBlock(blockToQuery));
+        }
+      }
+      pastBlocks = await Promise.all(blockFetchPromises);
+    } catch (error) {
+      console.error(
+        'VolumeChartDataAdapter - fetchDataPointBlocks() - Failed to fetch block block data for past days!',
+        error,
+      );
+      return Promise.reject(error);
+    }
+
+    return [...pastBlocks, currentBlock];
+  }
+
+  private async getTempusVolume(startBlock: ethers.providers.Block, endBlock: ethers.providers.Block) {
     if (!this.tempusControllerService || !this.vaultService) {
       console.error(
-        'VolumeChartDataAdapter - fetchData() - Attempted to use VolumeChartDataAdapter before initalizing it!',
+        'VolumeChartDataAdapter - fetchData() - Attempted to use VolumeChartDataAdapter before initializing it!',
       );
       return Promise.reject();
     }
@@ -105,125 +133,86 @@ class VolumeChartDataAdapter {
     let redeemEvents: RedeemedEvent[];
     let swapEvents: SwapEvent[];
     try {
+      const forUser = undefined;
+      const forPool = undefined;
       [depositEvents, redeemEvents, swapEvents] = await Promise.all([
-        this.tempusControllerService.getDepositedEvents(),
-        this.tempusControllerService.getRedeemedEvents(),
-        this.vaultService.getSwapEvents(),
+        this.tempusControllerService.getDepositedEvents(forPool, forUser, startBlock.number, endBlock.number),
+        this.tempusControllerService.getRedeemedEvents(forPool, forUser, startBlock.number, endBlock.number),
+        this.vaultService.getSwapEvents(forPool, startBlock.number, endBlock.number),
       ]);
     } catch (error) {
       console.error('Failed to fetch deposit and redeem events for volume chart', error);
       return Promise.reject(error);
     }
 
+    let eventsVolume: BigNumber;
     try {
-      await this.fetchEventBlocks([...depositEvents, ...redeemEvents, ...swapEvents]);
-    } catch (error) {
-      console.error('Failed to fetch block data for deposit and redeem events', error);
-      return Promise.reject(error);
-    }
-
-    try {
-      await this.fetchChartData([...depositEvents, ...redeemEvents, ...swapEvents]);
+      eventsVolume = await this.fetchEventsVolume([...depositEvents, ...redeemEvents, ...swapEvents]);
     } catch (error) {
       console.error('Failed to fetch chart data for deposit and redeem events', error);
       return Promise.reject(error);
     }
+
+    return {
+      volume: eventsVolume,
+      timeStart: endBlock.timestamp,
+      timeEnd: endBlock.timestamp,
+    };
   }
 
   /**
    * Fetches chart data for all passed events.
    */
-  private async fetchChartData(events: Array<DepositedEvent | RedeemedEvent | SwapEvent>): Promise<void> {
-    const fetchPromises: Promise<EventChartData>[] = [];
+  private async fetchEventsVolume(events: Array<DepositedEvent | RedeemedEvent | SwapEvent>): Promise<BigNumber> {
+    const fetchPromises: Promise<BigNumber>[] = [];
 
     events.forEach(event => {
-      fetchPromises.push(this.getEventChartData(event));
+      fetchPromises.push(this.getEventValue(event));
     });
 
+    let eventValues: BigNumber[];
     try {
-      this.chartData = await Promise.all(fetchPromises);
+      eventValues = await Promise.all(fetchPromises);
     } catch (error) {
       console.log('Failed to fetch events chart data', error);
       return Promise.reject(error);
     }
-  }
 
-  /**
-   * Fetches block data for all provided events.
-   */
-  private async fetchEventBlocks(events: Array<DepositedEvent | RedeemedEvent | SwapEvent>): Promise<void> {
-    const fetchBlockPromises: Promise<Block>[] = [];
-
-    events.forEach(event => {
-      fetchBlockPromises.push(event.getBlock());
+    let totalVolume = BigNumber.from('0');
+    eventValues.forEach(value => {
+      totalVolume = totalVolume.add(value);
     });
-
-    try {
-      this.eventBlockData = await Promise.all(fetchBlockPromises);
-    } catch (error) {
-      console.error('Failed to fetch block data for events', error);
-      return Promise.reject(error);
-    }
-  }
-
-  /**
-   * Returns block data for specified event - fetches data from local block cache.
-   */
-  private getEventBlock(event: DepositedEvent | RedeemedEvent | SwapEvent): Block {
-    const block = this.eventBlockData.find(block => {
-      return block.number === event.blockNumber;
-    });
-
-    if (!block) {
-      throw new Error('Failed to find block data for event!');
-    }
-
-    return block;
+    return totalVolume;
   }
 
   /**
    * Generates chart data for a single event that contains timestamp of the event and value of the event in terms of USD
    */
-  private async getEventChartData(event: DepositedEvent | RedeemedEvent | SwapEvent): Promise<EventChartData> {
+  private async getEventValue(event: DepositedEvent | RedeemedEvent | SwapEvent): Promise<BigNumber> {
     if (!this.tempusPoolService || !this.statisticsService || !this.tempusAMMService) {
       console.error('Attempted to use VolumeChartDataAdapter before initializing it!');
       return Promise.reject();
     }
 
-    let eventPoolBackingToken: Ticker;
-    try {
-      const eventPoolAddress = await getEventPoolAddress(event, this.tempusAMMService);
-      eventPoolBackingToken = await this.tempusPoolService.getBackingTokenTicker(eventPoolAddress);
-    } catch (error) {
-      console.error('Failed to get tempus pool backing token ticker!', error);
-      return Promise.reject(error);
+    const eventPoolAddress = getEventPoolAddress(event, this.tempusAMMService);
+
+    const poolConfig = getConfig().tempusPools.find(pool => pool.address === eventPoolAddress);
+    if (!poolConfig) {
+      return Promise.reject();
     }
 
     let poolBackingTokenRate: BigNumber;
     try {
-      poolBackingTokenRate = await this.statisticsService.getRate(eventPoolBackingToken, {
-        blockTag: event.blockNumber,
-      });
+      // TODO - Use chainlink data once we go to mainnet
+      poolBackingTokenRate = await this.statisticsService.getCoingeckoRate(poolConfig.backingToken);
     } catch (error) {
       console.error('Failed to get tempus pool exchange rate to USD!');
       return Promise.reject(error);
     }
 
-    let eventBackingTokenValue: BigNumber;
-    try {
-      eventBackingTokenValue = await getEventBackingTokenValue(event, this.tempusAMMService, this.tempusPoolService);
-    } catch (error) {
-      console.error(
-        'VolumeChartDataAdapter - getEventChartData() - Failed to get event value in backing tokes!',
-        error,
-      );
-      return Promise.reject(error);
-    }
+    const eventBackingTokenValue = getEventBackingTokenValue(event, this.tempusAMMService, this.tempusPoolService);
 
-    return {
-      date: new Date(this.getEventBlock(event).timestamp * 1000),
-      value: mul18f(eventBackingTokenValue, poolBackingTokenRate),
-    };
+    return mul18f(eventBackingTokenValue, poolBackingTokenRate);
   }
 }
 export default VolumeChartDataAdapter;

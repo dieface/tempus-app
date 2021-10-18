@@ -49,29 +49,13 @@ class TempusAMMService {
     throw new Error(`TempusAMMService - poolId('${address}') - Invalid AMM address provided!`);
   }
 
-  public async getTempusPoolAddressFromId(poolId: string): Promise<string> {
-    const addressDataFetchPromises: Promise<TempusPoolAddressData>[] = [];
-    this.tempusAMMMap.forEach(tempusAMM => {
-      addressDataFetchPromises.push(this.fetchTempusPoolAddressData(tempusAMM));
-    });
-    let addressData: TempusPoolAddressData[];
-    try {
-      addressData = await Promise.all(addressDataFetchPromises);
-    } catch (error) {
-      console.error(
-        'TempusAMMService - getTempusPoolAddressFromId() - Failed to get address data for tempus pools!',
-        error,
-      );
-      return Promise.reject(error);
+  public getTempusPoolAddressFromId(poolId: string): string {
+    const poolConfig = getConfig().tempusPools.find(pool => pool.poolId === poolId);
+    if (!poolConfig) {
+      throw new Error(`Failed to find tempus pool config for pool with ${poolId} PoolID`);
     }
 
-    for (let i = 0; i < addressData.length; i++) {
-      if (addressData[i].tempusPoolId === poolId) {
-        return addressData[i].poolAddress;
-      }
-    }
-
-    throw new Error('Failed to get tempus pool address from ID!');
+    return poolConfig.address;
   }
 
   public async getTempusPoolAddress(address: string): Promise<string> {
