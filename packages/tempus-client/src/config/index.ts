@@ -4,7 +4,7 @@ import { Config } from '../interfaces';
 // Waiting for backend team for factory contract - for now, we need to store all relevant contract addresses in this config.
 const config: Config = {
   tempusPools: [
-    {
+    /*{
       address: '0x1c5AbE736C6CCb743Bc933241AB462e6b38c6EA4',
       poolId: '0xfb2df41a618b44634a4e180248faaa4dc755d84a000200000000000000000036',
       ammAddress: '0xFb2dF41A618b44634a4E180248fAAA4dc755d84a',
@@ -37,6 +37,23 @@ const config: Config = {
       spotPrice: '2',
       maxLeftoverShares: '0.00001',
       decimalsForUI: 4,
+    },*/
+    {
+      address: '0x4Abee77a95857031321C7bdf41A2011554469554',
+      ammAddress: '0x864c092cE9f4217DaF5f4Bed10E299Ebc6FfE79b',
+      poolId: '0x864c092ce9f4217daf5f4bed10e299ebc6ffe79b000200000000000000000038',
+      backingToken: 'ETH',
+      backingTokenAddress: '0x0000000000000000000000000000000000000000',
+      yieldBearingToken: 'stETH',
+      yieldBearingTokenAddress: '0x209b1C2B038ef377f6f86d33C5Ca94d10ed9C89d',
+      principalsAddress: '0xfD180Cb13362ea75e1b87F44420fd0ddfE6a7508',
+      yieldsAddress: '0x60a2BC1AA0a7C9Fb492d42C3d8eF582142722AB7',
+      startDate: 1634571281000,
+      maturityDate: 1675170000000,
+      decimalsForUI: 4,
+      maxLeftoverShares: '0.00001',
+      protocol: 'lido',
+      spotPrice: '2',
     },
   ],
   statisticsContract: '0x01fF82791D8414826ec7390dfE7902703F632F5C',
