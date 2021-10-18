@@ -4,7 +4,7 @@ import { Config } from '../interfaces';
 // Waiting for backend team for factory contract - for now, we need to store all relevant contract addresses in this config.
 const config: Config = {
   tempusPools: [
-    /*{
+    {
       address: '0x1c5AbE736C6CCb743Bc933241AB462e6b38c6EA4',
       poolId: '0xfb2df41a618b44634a4e180248faaa4dc755d84a000200000000000000000036',
       ammAddress: '0xFb2dF41A618b44634a4E180248fAAA4dc755d84a',
@@ -37,10 +37,10 @@ const config: Config = {
       spotPrice: '2',
       maxLeftoverShares: '0.00001',
       decimalsForUI: 4,
-    },*/
+    },
     {
-      address: '0x4Abee77a95857031321C7bdf41A2011554469554',
-      ammAddress: '0x864c092cE9f4217DaF5f4Bed10E299Ebc6FfE79b',
+      address: '0x68Dbc29bf19Ce959859B828BFFAB4082Af8e38C5',
+      ammAddress: '0xD7E0287c555568416956435B0C8777AD376f8040',
       poolId: '0xd7e0287c555568416956435b0c8777ad376f804000020000000000000000003f',
       backingToken: 'ETH',
       backingTokenAddress: '0x0000000000000000000000000000000000000000',
