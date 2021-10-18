@@ -243,6 +243,10 @@ class StatisticsService {
       return Promise.reject();
     }
 
+    if (lpAmount.isZero() && principalAmount.isZero() && yieldsAmount.isZero()) {
+      return BigNumber.from('0');
+    }
+
     try {
       return await this.stats.estimateExitAndRedeem(
         tempusAmmAddress,
