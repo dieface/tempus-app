@@ -16,6 +16,7 @@ const getTempusAMMService = (signerOrProvider?: JsonRpcSigner | JsonRpcProvider)
       TempusAMMABI: TempusAMMABI,
       signerOrProvider: getDefaultProvider(),
       tempusPoolService: getTempusPoolService(),
+      config: getConfig(),
     });
   }
 
@@ -26,6 +27,7 @@ const getTempusAMMService = (signerOrProvider?: JsonRpcSigner | JsonRpcProvider)
       TempusAMMABI: TempusAMMABI,
       signerOrProvider: signerOrProvider,
       tempusPoolService: getTempusPoolService(signerOrProvider),
+      config: getConfig(),
     });
   }
 

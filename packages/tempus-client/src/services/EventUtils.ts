@@ -50,21 +50,14 @@ export function getEventPoolAddress(event: DepositedEvent | RedeemedEvent | Swap
 
 export function getEventBackingTokenValue(
   event: DepositedEvent | RedeemedEvent | SwapEvent,
-  amm: TempusAMMService,
-  pool: TempusPoolService,
+  principalsAddress: string,
 ): BigNumber {
   if (isDepositEvent(event) || isRedeemEvent(event)) {
     return event.args.backingTokenValue;
   }
   if (isSwapEvent(event)) {
-    const tempusPoolAddress = amm.getTempusPoolAddressFromId(event.args.poolId);
-    const poolConfig = getConfig().tempusPools.find(pool => pool.address === tempusPoolAddress);
-    if (!poolConfig) {
-      throw new Error('Failed to find pool config!');
-    }
-
     // If tokenIn is principal token, return amountIn as an event value, otherwise return amountOut as an event value.
-    return event.args.tokenIn === poolConfig.principalsAddress ? event.args.amountIn : event.args.amountOut;
+    return event.args.tokenIn === principalsAddress ? event.args.amountIn : event.args.amountOut;
   }
 
   throw new Error('EventUtils - getEventBackingTokenValue() - Invalid event type!');

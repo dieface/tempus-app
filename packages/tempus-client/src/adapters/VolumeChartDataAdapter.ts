@@ -1,6 +1,7 @@
 import { BigNumber, ethers } from 'ethers';
 import { JsonRpcProvider, JsonRpcSigner } from '@ethersproject/providers';
 import { BLOCK_DURATION_SECONDS, SECONDS_IN_A_DAY } from '../constants';
+import { Config } from '../interfaces';
 import ChartDataPoint from '../interfaces/ChartDataPoint';
 import StatisticsService from '../services/StatisticsService';
 import TempusPoolService from '../services/TempusPoolService';
@@ -18,6 +19,7 @@ type VolumeChartDataAdapterParameters = {
   tempusControllerService: TempusControllerService;
   vaultService: VaultService;
   tempusAMMService: TempusAMMService;
+  config: Config;
 };
 
 class VolumeChartDataAdapter {
@@ -31,6 +33,8 @@ class VolumeChartDataAdapter {
 
   private signerOrProvider: JsonRpcProvider | JsonRpcSigner | null = null;
 
+  private config: Config | null = null;
+
   public init(params: VolumeChartDataAdapterParameters): void {
     this.tempusPoolService = params.tempusPoolService;
     this.statisticsService = params.statisticsService;
@@ -39,6 +43,8 @@ class VolumeChartDataAdapter {
     this.tempusAMMService = params.tempusAMMService;
 
     this.signerOrProvider = params.signerOrProvider;
+
+    this.config = params.config;
   }
 
   public async generateChartData(): Promise<ChartDataPoint[]> {
@@ -174,7 +180,7 @@ class VolumeChartDataAdapter {
     try {
       eventValues = await Promise.all(fetchPromises);
     } catch (error) {
-      console.log('Failed to fetch events chart data', error);
+      console.error('Failed to fetch events chart data', error);
       return Promise.reject(error);
     }
 
@@ -189,14 +195,14 @@ class VolumeChartDataAdapter {
    * Generates chart data for a single event that contains timestamp of the event and value of the event in terms of USD
    */
   private async getEventValue(event: DepositedEvent | RedeemedEvent | SwapEvent): Promise<BigNumber> {
-    if (!this.tempusPoolService || !this.statisticsService || !this.tempusAMMService) {
+    if (!this.tempusPoolService || !this.statisticsService || !this.tempusAMMService || !this.config) {
       console.error('Attempted to use VolumeChartDataAdapter before initializing it!');
       return Promise.reject();
     }
 
     const eventPoolAddress = getEventPoolAddress(event, this.tempusAMMService);
 
-    const poolConfig = getConfig().tempusPools.find(pool => pool.address === eventPoolAddress);
+    const poolConfig = this.config.tempusPools.find(pool => pool.address === eventPoolAddress);
     if (!poolConfig) {
       return Promise.reject();
     }
@@ -210,7 +216,7 @@ class VolumeChartDataAdapter {
       return Promise.reject(error);
     }
 
-    const eventBackingTokenValue = getEventBackingTokenValue(event, this.tempusAMMService, this.tempusPoolService);
+    const eventBackingTokenValue = getEventBackingTokenValue(event, poolConfig.principalsAddress);
 
     return mul18f(eventBackingTokenValue, poolBackingTokenRate);
   }

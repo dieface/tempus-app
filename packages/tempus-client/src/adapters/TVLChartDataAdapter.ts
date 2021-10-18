@@ -103,7 +103,7 @@ class TVLChartDataAdapter {
     try {
       const blockFetchPromises = [];
       // Fetch Blocks for previous 29 days (1 block per day)
-      for (let i = this.NUMBER_OF_PAST_DAYS; i >= 0; i--) {
+      for (let i = this.NUMBER_OF_PAST_DAYS; i > 0; i--) {
         const blockToQuery = currentBlock.number - (currentBlock.number % blockInterval) - i * blockInterval;
         if (this.signerOrProvider instanceof JsonRpcProvider) {
           blockFetchPromises.push(this.signerOrProvider.getBlock(blockToQuery));

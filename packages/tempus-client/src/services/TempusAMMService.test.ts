@@ -11,6 +11,25 @@ describe('TempusAMMService', () => {
   const tempusAMMAddresses = ['address-a', 'address-b', 'address-c'];
   const tempusPoolIds = ['test-pool-id-a', 'test-pool-id-b', 'test-pool-id-c'];
   const tempusPoolAddresses = ['test-pool-address-a', 'test-pool-address-b', 'test-pool-address-c'];
+  const mockConfig = {
+    tempusPools: [
+      {
+        ammAddress: 'address-a',
+        address: 'test-pool-address-a',
+        poolId: 'test-pool-id-a',
+      },
+      {
+        ammAddress: 'address-b',
+        address: 'test-pool-address-b',
+        poolId: 'test-pool-id-b',
+      },
+      {
+        ammAddress: 'address-c',
+        address: 'test-pool-address-c',
+        poolId: 'test-pool-id-c',
+      },
+    ],
+  };
 
   const mockGetPoolId = jest.fn();
   const mockTempusPool = jest.fn();
@@ -39,6 +58,7 @@ describe('TempusAMMService', () => {
       signerOrProvider: getDefaultProvider(),
       TempusAMMABI: TempusAMMABI,
       tempusPoolService,
+      config: mockConfig as any,
     });
   });
 
@@ -58,6 +78,7 @@ describe('TempusAMMService', () => {
         signerOrProvider: getDefaultProvider(),
         tempusAMMAddresses: tempusAMMAddresses,
         tempusPoolService,
+        config: mockConfig as any,
       });
 
       expect(tempusAMMService['tempusAMMMap'].size).toBe(3);
@@ -97,32 +118,19 @@ describe('TempusAMMService', () => {
 
   describe('getTempusPoolAddressFromId()', () => {
     test('returns tempus pool address for specified poolId', async () => {
-      const poolAddress = await tempusAMMService.getTempusPoolAddressFromId(tempusPoolIds[0]);
+      const poolAddress = tempusAMMService.getTempusPoolAddressFromId(tempusPoolIds[0]);
 
       expect(poolAddress).toBe(tempusPoolAddresses[0]);
     });
 
-    test('throws an error if AMM does not exist for specified poolId', async () => {
+    test('throws an error if tempus pool config with specified poolID does not exist', async () => {
       const nonExistingPoolId = 'non-existing-pooId';
 
       try {
-        await tempusAMMService.getTempusPoolAddressFromId(nonExistingPoolId);
+        tempusAMMService.getTempusPoolAddressFromId(nonExistingPoolId);
       } catch (error: any) {
-        expect(error.message).toBe('Failed to get tempus pool address from ID!');
+        expect(error.message).toBe(`Failed to find tempus pool config for pool with ${nonExistingPoolId} PoolID`);
       }
-    });
-
-    test('console logs the error message and returns rejected promise if contract call fails', async () => {
-      mockGetPoolId.mockImplementation(() => {
-        throw new Error('contract-error');
-      });
-
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-
-      const promise = tempusAMMService.getTempusPoolAddressFromId(tempusPoolIds[0]);
-      await expect(promise).rejects.toEqual(new Error('contract-error'));
-
-      expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
     });
   });
 

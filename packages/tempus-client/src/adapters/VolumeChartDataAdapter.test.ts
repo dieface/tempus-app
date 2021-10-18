@@ -3,16 +3,11 @@ import { SECONDS_IN_A_DAY } from '../constants';
 
 import VolumeChartDataAdapter from './VolumeChartDataAdapter';
 
-jest.mock('@ethersproject/providers');
-const { JsonRpcProvider } = jest.requireMock('@ethersproject/providers');
-
 let instance: VolumeChartDataAdapter;
 
 describe('generateChartData()', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-
-    let mockProvider = new JsonRpcProvider();
 
     jest.spyOn(ejs as any, 'Contract').mockReturnValue({
       getPoolId: jest.fn(),
@@ -25,9 +20,15 @@ describe('generateChartData()', () => {
     });
 
     let mockGetBlock = jest.fn();
-    for (let i = 0; i < 30; i++) {
+    // Latest block mock
+    mockGetBlock = mockGetBlock.mockResolvedValueOnce({
+      number: 30,
+      timestamp: Math.floor(new Date().getTime() / 1000),
+    });
+    // Past days mock
+    for (let i = 30; i >= 1; i--) {
       mockGetBlock = mockGetBlock.mockResolvedValueOnce({
-        number: i,
+        number: 30 - i,
         timestamp: Math.floor(new Date().getTime() / 1000) - SECONDS_IN_A_DAY * (i / 2),
       });
     }
@@ -43,7 +44,6 @@ describe('generateChartData()', () => {
               pool: 'pool-1',
               backingTokenValue: ejs.utils.parseEther('20'),
             },
-            getBlock: mockGetBlock,
           },
           {
             name: 'd-event-2',
@@ -53,7 +53,6 @@ describe('generateChartData()', () => {
               pool: 'pool-1',
               backingTokenValue: ejs.utils.parseEther('25'),
             },
-            getBlock: mockGetBlock,
           },
         ]),
         getRedeemedEvents: jest.fn().mockResolvedValue([
@@ -65,7 +64,6 @@ describe('generateChartData()', () => {
               pool: 'pool-1',
               backingTokenValue: ejs.utils.parseEther('26'),
             },
-            getBlock: mockGetBlock,
           },
           {
             name: 'r-event-2',
@@ -75,7 +73,6 @@ describe('generateChartData()', () => {
               pool: 'pool-1',
               backingTokenValue: ejs.utils.parseEther('500'),
             },
-            getBlock: mockGetBlock,
           },
         ]),
       };
@@ -90,8 +87,8 @@ describe('generateChartData()', () => {
             args: {
               tokenIn: 'principal-address',
               amountIn: ejs.utils.parseEther('5'),
+              poolId: 'pool-id-1',
             },
-            getBlock: mockGetBlock,
           },
           {
             name: 's-event-2',
@@ -99,8 +96,8 @@ describe('generateChartData()', () => {
             args: {
               tokenIn: 'principal-address',
               amountIn: ejs.utils.parseEther('3'),
+              poolId: 'pool-id-1',
             },
-            getBlock: mockGetBlock,
           },
         ]),
       };
@@ -108,7 +105,7 @@ describe('generateChartData()', () => {
 
     const mockGetTempusAMMService = jest.fn().mockImplementation(() => {
       return {
-        getTempusPoolAddressFromId: jest.fn().mockResolvedValue('pool-1'),
+        getTempusPoolAddressFromId: jest.fn().mockReturnValue('pool-1'),
       };
     });
 
@@ -122,17 +119,33 @@ describe('generateChartData()', () => {
     const mockGetStatisticsService = jest.fn().mockImplementation(() => {
       return {
         getRate: jest.fn().mockResolvedValue(ejs.ethers.utils.parseEther('2')),
+        getCoingeckoRate: jest.fn().mockResolvedValue(ejs.ethers.utils.parseEther('2')),
       };
+    });
+
+    const getMockProvider = jest.fn().mockReturnValue({
+      provider: {
+        getBlock: mockGetBlock,
+      },
     });
 
     instance = new VolumeChartDataAdapter();
     instance.init({
-      signerOrProvider: mockProvider,
+      signerOrProvider: getMockProvider(),
       statisticsService: mockGetStatisticsService(),
       tempusAMMService: mockGetTempusAMMService(),
       tempusControllerService: mockGetTempusControllerService(),
       tempusPoolService: mockGetTempusPoolService(),
       vaultService: mockGetVaultService(),
+      config: {
+        tempusPools: [
+          {
+            address: 'pool-1',
+            poolId: 'pool-id-1',
+            principalsAddress: 'principal-address',
+          },
+        ],
+      } as any,
     });
   });
 
@@ -141,13 +154,13 @@ describe('generateChartData()', () => {
 
     expect(chartData.length).toBe(30);
 
-    expect(chartData[29].value).toBe(90);
-    expect(chartData[28].value).toBe(1016);
-    expect(chartData[27].value).toBe(52);
-    expect(chartData[26].value).toBe(0);
+    expect(chartData[29].value).toBe(1158);
+    expect(chartData[28].value).toBe(1158);
+    expect(chartData[27].value).toBe(1158);
+    expect(chartData[26].value).toBe(1158);
 
-    expect(Number(chartData[29].valueIncrease).toFixed(2)).toBe('-91.14');
-    expect(Number(chartData[28].valueIncrease).toFixed(2)).toBe('1853.85');
+    expect(Number(chartData[29].valueIncrease).toFixed(2)).toBe('0.00');
+    expect(Number(chartData[28].valueIncrease).toFixed(2)).toBe('0.00');
     expect(Number(chartData[27].valueIncrease).toFixed(2)).toBe('0.00');
     expect(Number(chartData[26].valueIncrease).toFixed(2)).toBe('0.00');
   });

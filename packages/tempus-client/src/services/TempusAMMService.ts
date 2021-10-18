@@ -2,6 +2,7 @@ import { BigNumber, Contract, ethers } from 'ethers';
 import { JsonRpcProvider, JsonRpcSigner } from '@ethersproject/providers';
 import { TempusAMM } from '../abi/TempusAMM';
 import TempusAMMABI from '../abi/TempusAMM.json';
+import { Config } from '../interfaces';
 import { DAYS_IN_A_YEAR, SECONDS_IN_A_DAY } from '../constants';
 import { mul18f, div18f } from '../utils/wei-math';
 import getConfig from '../utils/get-config';
@@ -19,13 +20,16 @@ type TempusAMMServiceParameters = {
   TempusAMMABI: typeof TempusAMMABI;
   signerOrProvider: JsonRpcSigner | JsonRpcProvider;
   tempusPoolService: TempusPoolService;
+  config: Config;
 };
 
 class TempusAMMService {
   private tempusAMMMap: Map<string, TempusAMM> = new Map<string, TempusAMM>();
   private tempusPoolService: TempusPoolService | null = null;
 
-  public init({ tempusAMMAddresses, signerOrProvider, tempusPoolService }: TempusAMMServiceParameters) {
+  private config: Config | null = null;
+
+  public init({ tempusAMMAddresses, signerOrProvider, tempusPoolService, config }: TempusAMMServiceParameters) {
     this.tempusAMMMap.clear();
 
     tempusAMMAddresses.forEach((address: string) => {
@@ -33,6 +37,8 @@ class TempusAMMService {
     });
 
     this.tempusPoolService = tempusPoolService;
+
+    this.config = config;
   }
 
   public poolId(address: string): Promise<string> {
@@ -50,7 +56,13 @@ class TempusAMMService {
   }
 
   public getTempusPoolAddressFromId(poolId: string): string {
-    const poolConfig = getConfig().tempusPools.find(pool => pool.poolId === poolId);
+    if (!this.config) {
+      throw new Error(
+        'TempusAMMService - getTempusPoolAddressFromId() - Attempted to se TempusAMMService before initializing it!',
+      );
+    }
+
+    const poolConfig = this.config.tempusPools.find(pool => pool.poolId === poolId);
     if (!poolConfig) {
       throw new Error(`Failed to find tempus pool config for pool with ${poolId} PoolID`);
     }

@@ -5,6 +5,7 @@ import getTempusAMMService from '../services/getTempusAMMService';
 import getTempusControllerService from '../services/getTempusControllerService';
 import getTempusPoolService from '../services/getTempusPoolService';
 import getVaultService from '../services/getVaultService';
+import getConfig from '../utils/get-config';
 import VolumeChartDataAdapter from './VolumeChartDataAdapter';
 
 let volumeChartDataAdapter: VolumeChartDataAdapter;
@@ -18,6 +19,7 @@ const getVolumeChartDataAdapter = (signerOrProvider?: JsonRpcSigner | JsonRpcPro
       tempusControllerService: getTempusControllerService(),
       tempusPoolService: getTempusPoolService(),
       vaultService: getVaultService(),
+      config: getConfig(),
     });
   }
 
@@ -29,6 +31,7 @@ const getVolumeChartDataAdapter = (signerOrProvider?: JsonRpcSigner | JsonRpcPro
       tempusControllerService: getTempusControllerService(signerOrProvider),
       tempusPoolService: getTempusPoolService(signerOrProvider),
       vaultService: getVaultService(signerOrProvider),
+      config: getConfig(),
     });
   }
 

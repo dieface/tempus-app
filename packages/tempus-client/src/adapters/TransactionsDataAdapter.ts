@@ -23,6 +23,8 @@ import getTempusAMMService from '../services/getTempusAMMService';
 import TempusAMMService from '../services/TempusAMMService';
 import { Ticker, Transaction, TransactionAction } from '../interfaces';
 import { mul18f } from '../utils/wei-math';
+import getConfig from '../utils/get-config';
+import { TempusPool } from '../interfaces/TempusPool';
 
 type TransactionsDataAdapterParameters = {
   signerOrProvider: JsonRpcProvider | JsonRpcSigner;
@@ -181,11 +183,14 @@ class TransactionsDataAdapter {
       return Promise.reject();
     }
 
-    let eventPoolBackingToken: Ticker;
+    let poolConfig: TempusPool;
     try {
-      const eventPoolAddress = await getEventPoolAddress(event, this.tempusAMMService);
-
-      eventPoolBackingToken = await this.tempusPoolService.getBackingTokenTicker(eventPoolAddress);
+      const eventPoolAddress = getEventPoolAddress(event, this.tempusAMMService);
+      const result = getConfig().tempusPools.find(poolConfig => poolConfig.address === eventPoolAddress);
+      if (!result) {
+        return Promise.reject();
+      }
+      poolConfig = result;
     } catch (error) {
       console.log(
         'TransactionsDataAdapter - getEventUSDValue() - Failed to fetch event tempus pool backing token ticker!',
@@ -195,7 +200,7 @@ class TransactionsDataAdapter {
 
     let poolBackingTokenRate: BigNumber;
     try {
-      poolBackingTokenRate = await this.statisticsService.getRate(eventPoolBackingToken, {
+      poolBackingTokenRate = await this.statisticsService.getRate(poolConfig.backingToken, {
         blockTag: event.blockNumber,
       });
     } catch (error) {
@@ -205,7 +210,7 @@ class TransactionsDataAdapter {
 
     let eventBackingTokenValue: BigNumber;
     try {
-      eventBackingTokenValue = await getEventBackingTokenValue(event, this.tempusAMMService, this.tempusPoolService);
+      eventBackingTokenValue = await getEventBackingTokenValue(event, poolConfig.principalsAddress);
     } catch (error) {
       console.error(
         'TransactionsDataAdapter - getEventUSDValue() - Failed to get event value in backing tokes!',
